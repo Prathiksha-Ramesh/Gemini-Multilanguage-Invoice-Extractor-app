@@ -135,7 +135,7 @@ def updatecache(filename, module_globals=None):
     try:
         with tokenize.open(fullname) as fp:
             lines = fp.readlines()
-    except OSError:
+    except (OSError, UnicodeDecodeError, SyntaxError):
         return []
     if lines and not lines[-1].endswith('\n'):
         lines[-1] += '\n'
@@ -154,7 +154,7 @@ def lazycache(filename, module_globals):
 
     :return: True if a lazy load is registered in the cache,
         otherwise False. To register such a load a module loader with a
-        get_source method must be found, the filename must be a cachable
+        get_source method must be found, the filename must be a cacheable
         filename, and the filename must not be already cached.
     """
     if filename in cache:
@@ -166,13 +166,11 @@ def lazycache(filename, module_globals):
         return False
     # Try for a __loader__, if available
     if module_globals and '__name__' in module_globals:
-        name = module_globals['__name__']
-        if (loader := module_globals.get('__loader__')) is None:
-            if spec := module_globals.get('__spec__'):
-                try:
-                    loader = spec.loader
-                except AttributeError:
-                    pass
+        spec = module_globals.get('__spec__')
+        name = getattr(spec, 'name', None) or module_globals['__name__']
+        loader = getattr(spec, 'loader', None)
+        if loader is None:
+            loader = module_globals.get('__loader__')
         get_source = getattr(loader, 'get_source', None)
 
         if name and get_source:

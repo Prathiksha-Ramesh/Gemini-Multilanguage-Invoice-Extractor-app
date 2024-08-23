@@ -157,6 +157,11 @@ class Bdb:
             # The user issued a 'next' or 'until' command.
             if self.stopframe is frame and self.stoplineno != -1:
                 self._set_stopinfo(None, None)
+            # The previous frame might not have f_trace set, unless we are
+            # issuing a command that does not expect to stop, we should set
+            # f_trace
+            if self.stoplineno != -1:
+                self._set_caller_tracefunc(frame)
         return self.trace_dispatch
 
     def dispatch_exception(self, frame, arg):
@@ -286,6 +291,15 @@ class Bdb:
         # stoplineno -1 means: don't stop at all
         self.stoplineno = stoplineno
 
+    def _set_caller_tracefunc(self, current_frame):
+        # Issue #13183: pdb skips frames after hitting a breakpoint and running
+        # step commands.
+        # Restore the trace function in the caller (that may not have been set
+        # for performance reasons) when returning from the current frame.
+        caller_frame = current_frame.f_back
+        if caller_frame and not caller_frame.f_trace:
+            caller_frame.f_trace = self.trace_dispatch
+
     # Derived classes and clients can call the following methods
     # to affect the stepping state.
 
@@ -299,14 +313,6 @@ class Bdb:
 
     def set_step(self):
         """Stop after one line of code."""
-        # Issue #13183: pdb skips frames after hitting a breakpoint and running
-        # step commands.
-        # Restore the trace function in the caller (that may not have been set
-        # for performance reasons) when returning from the current frame.
-        if self.frame_returning:
-            caller_frame = self.frame_returning.f_back
-            if caller_frame and not caller_frame.f_trace:
-                caller_frame.f_trace = self.trace_dispatch
         self._set_stopinfo(None, None)
 
     def set_next(self, frame):
@@ -570,9 +576,12 @@ class Bdb:
             rv = frame.f_locals['__return__']
             s += '->'
             s += reprlib.repr(rv)
-        line = linecache.getline(filename, lineno, frame.f_globals)
-        if line:
-            s += lprefix + line.strip()
+        if lineno is not None:
+            line = linecache.getline(filename, lineno, frame.f_globals)
+            if line:
+                s += lprefix + line.strip()
+        else:
+            s += f'{lprefix}Warning: lineno is None'
         return s
 
     # The following methods can be called by clients to use
@@ -805,15 +814,18 @@ def checkfuncname(b, frame):
     return True
 
 
-# Determines if there is an effective (active) breakpoint at this
-# line of code.  Returns breakpoint number or 0 if none
 def effective(file, line, frame):
-    """Determine which breakpoint for this file:line is to be acted upon.
+    """Return (active breakpoint, delete temporary flag) or (None, None) as
+       breakpoint to act upon.
 
-    Called only if we know there is a breakpoint at this location.  Return
-    the breakpoint that was triggered and a boolean that indicates if it is
-    ok to delete a temporary breakpoint.  Return (None, None) if there is no
-    matching breakpoint.
+       The "active breakpoint" is the first entry in bplist[line, file] (which
+       must exist) that is enabled, for which checkfuncname is True, and that
+       has neither a False condition nor a positive ignore count.  The flag,
+       meaning that a temporary breakpoint should be deleted, is False only
+       when the condiion cannot be evaluated (in which case, ignore count is
+       ignored).
+
+       If no such entry exists, then (None, None) is returned.
     """
     possibles = Breakpoint.bplist[file, line]
     for b in possibles:
