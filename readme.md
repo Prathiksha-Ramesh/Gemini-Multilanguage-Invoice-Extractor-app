@@ -8,6 +8,14 @@ The **Multilanguage Invoice Extractor** is a powerful application designed to au
 - **Custom Prompt Query**: Allows users to input specific queries (e.g., "What is the price of idly?") and receive precise answers based on the invoice content.
 - **Easy Integration**: Provides seamless integration with Streamlit for an intuitive and interactive user interface.
 
+## Screenshot
+Below is a screenshot of the Multilanguage Invoice Extractor in action:
+
+![Multilanguage Invoice Extractor](./Screenshot%202024-08-23%20112457.png)
+
+*In this example, the user queries the price of "idly" from a Tamil invoice, and the app responds with the correct price.*
+
+
 ## Requirements
 The application relies on several Python libraries, which are listed in the `requirements.txt` file. Below is a list of the key dependencies:
 
